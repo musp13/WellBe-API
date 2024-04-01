@@ -62,14 +62,19 @@ module.exports.adminLogin = async (req,res,next)=>{
 
         //req.session.access_token = token;
         //req.session.cookie.access_token=token;
+        const adminData = {
+            adminId : admin._id,
+            userName: admin.userName,
+            isAdmin : admin.isAdmin
+        }
         
         res.cookie("admin_access_token", token, {httpOnly: true, maxAge:24*60*60*1000})
            .status(200)
            .json({
                 status: 200,
                 message: "Login Success",
-                data: admin,
-                user_token: token
+                data: adminData,
+                admin_token: token
            });
 
     } catch (error) {

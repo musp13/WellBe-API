@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const cors = require('cors');
 
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
@@ -16,6 +17,12 @@ app.use(express.json());
 app.use(express.urlencoded({extended:true}));
 app.use(cookieParser());
 app.use(express.static('public'));
+app.use(cors(
+    {
+        origin: process.env.BASE_URL_CLIENT,
+        credentials: true
+    }
+)); 
 
 // Initialize and use the session middleware
 app.use(session({

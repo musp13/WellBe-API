@@ -17,7 +17,7 @@ const verifyUserToken = (req,res,next)=>{
 
 module.exports.verifyUser = (req, res, next)=>{
     verifyUserToken(req, res, ()=>{
-        if(req.user.id === req.params.id )
+        if(req.user.id === req.query.id )
             next();
         else
             return next(CreateError(403, "You are not authorized"));

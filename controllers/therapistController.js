@@ -58,14 +58,22 @@ const sendVerifyMail=async (name,email,therapist_id)=>{
 
 module.exports.therapistRegister = async (req,res,next)=>{
     try {
-        const therapist = await Therapist.findOne({email: req.body.email});
+        const therapist = await Therapist.findOne({$or:[{email: req.body.email}, {userName: req.body.userName}]});
         if(therapist)
         {
             return next(CreateError(400, "Email already registered"));
         }
+        if(req.body.fullName.trim().length<=3)
+        {
+            return next(CreateError(403, "Full Name should have more than 3 characters"));
+        }
         if(req.body.password != req.body.confirmPassword)
         {
             return next(CreateError(401, "Passwords do not match"));
+        }
+        if(req.body.password.trim().length<=8)
+        {
+            return next(CreateError(401, "Password should be atleast 8 characters"));
         }
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(req.body.password, salt);
@@ -122,16 +130,17 @@ module.exports.verifyMail = async (req,res,next)=>{
 
 module.exports.therapistLogin = async (req,res,next)=>{
     try {
+        //console.log('inside therapist login,check re.body: ', req.body);
         const therapist = await Therapist.findOne({email: req.body.email});
         
         if(!therapist)
         {
-            return next(CreateError(404,'User not found'))
+            return next(CreateError(404,'Invalid Credentials'))//User not found
         }
         const isPasswordCorrect = await bcrypt.compare(req.body.password, therapist.password);
         if(!isPasswordCorrect)
         {
-            return next(CreateError(400,'Password is incorrect'));
+            return next(CreateError(400,'Invalid Credentials'));//Password is incorrect
         }
         if(!therapist.isVerified)
         {
@@ -144,18 +153,23 @@ module.exports.therapistLogin = async (req,res,next)=>{
 
         //req.session.access_token = token;
         //req.session.cookie.access_token=token;
+        const therapistData = {
+            therapistId : therapist._id,
+            userName: therapist.userName,
+            email : therapist.email
+        }
         
         res.cookie("therapist_access_token", token, {httpOnly: true, maxAge:24*60*60*1000})
            .status(200)
            .json({
                 status: 200,
                 message: "Login Success",
-                data: therapist,
+                data: therapistData,
                 therapist_token: token
            });
 
     } catch (error) {
-            return next(CreateError(500,'Something went wrong!'));
+            return next(CreateError(500,error.message));
     }
 }
 
