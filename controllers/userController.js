@@ -2,7 +2,8 @@ const User = require('../models/userModel.js');
 
 const { CreateError } = require('../utils/error');
 const {CreateSuccess} = require('../utils/success');
-const { generateOTP } = require('../utils/otpGenerator.js')
+const { generateOTP } = require('../utils/otpGenerator.js');
+const { sendVerifyMail } = require('../utils/sendVerifyMail.js');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -16,7 +17,7 @@ const emailPassword = process.env.EMAIL_PASSWORD;
 
 const baseUrl = process.env.BASE_URL;
 
-const sendVerifyMail=async (name,email,user_id)=>{
+/* const sendVerifyMail=async (name,email,user_id)=>{
     try
     {
         const otp = generateOTP()+'';
@@ -59,7 +60,7 @@ const sendVerifyMail=async (name,email,user_id)=>{
     {
         console.log(err.message);
     }
-};
+}; */
 
 module.exports.userRegister = async (req,res,next)=>{
     try {
@@ -71,7 +72,7 @@ module.exports.userRegister = async (req,res,next)=>{
         }
         if(req.body.fullName.trim().length<3)
         {
-            return next(CreateError(403, "Full Name should have more than 3 characters"));
+            return next(CreateError(403, "Full Name should have atleast 3 characters"));
         }
         if(req.body.password != req.body.confirmPassword)
         {
@@ -124,7 +125,7 @@ module.exports.verifyMail = async (req,res,next)=>{
         //console.log('check id user is found', user);
         if(user.isVerified)
         {
-            return next(CreateSuccess(200,'User as been already verified.'))
+            return next(CreateSuccess(200,'User has been already verified.'))
         }
         const enteredOTP = req.body.otp;
         if (user.OTP == enteredOTP) {
@@ -146,9 +147,9 @@ module.exports.verifyMail = async (req,res,next)=>{
             errorMessage = "Invalid user ID provided.";
         }
 
-        if (err.code === 11000) {
+        /* if (err.code === 11000) {
             errorMessage = "Email has already been verified.";
-        }
+        } */
 
         return next(CreateError(406, errorMessage));
     }

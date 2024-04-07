@@ -3,20 +3,21 @@ const Therapist = require('../models/therapistModel.js');
 
 const { CreateError } = require('../utils/error');
 const {CreateSuccess} = require('../utils/success');
+const { sendVerifyMail } = require('../utils/sendVerifyMail.js');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+//const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-const emailUser = process.env.EMAIL_USER;
+/* const emailUser = process.env.EMAIL_USER;
 const emailPassword = process.env.EMAIL_PASSWORD;
 
-const baseUrl = process.env.BASE_URL;
+const baseUrl = process.env.BASE_URL; */
 
-const sendVerifyMail=async (name,email,therapist_id)=>{
+/* const sendVerifyMail=async (name,email,therapist_id)=>{
     try
     {
         //console.log("checking credentials", emailUser, emailPassword);
@@ -54,24 +55,24 @@ const sendVerifyMail=async (name,email,therapist_id)=>{
     {
         console.log(err.message);
     }
-};
+}; */
 
-module.exports.therapistRegister = async (req,res,next)=>{
+/* module.exports.therapistRegister = async (req,res,next)=>{
     try {
         const therapist = await Therapist.findOne({$or:[{email: req.body.email}, {userName: req.body.userName}]});
         if(therapist)
         {
             return next(CreateError(400, "Email already registered"));
         }
-        if(req.body.fullName.trim().length<=3)
+        if(req.body.fullName.trim().length<3)
         {
-            return next(CreateError(403, "Full Name should have more than 3 characters"));
+            return next(CreateError(403, "Full Name should have atleast 3 characters"));
         }
         if(req.body.password != req.body.confirmPassword)
         {
             return next(CreateError(401, "Passwords do not match"));
         }
-        if(req.body.password.trim().length<=8)
+        if(req.body.password.trim().length<8)
         {
             return next(CreateError(401, "Password should be atleast 8 characters"));
         }
@@ -100,14 +101,26 @@ module.exports.therapistRegister = async (req,res,next)=>{
     } catch (error) {
         console.log(error.message);
     }
-}
+} */
 
 module.exports.verifyMail = async (req,res,next)=>{
     try
     {
-        const updateInfo = await Therapist.updateOne({_id:req.query.id},{$set:{isVerified:true}});
-        return next(CreateSuccess(200, 'Your Email has been verified. Pease log in.'));
+        const therapist = await Therapist.findById(req.query.therapistId);
         
+        if(therapist.isVerified)
+        {
+            return next(CreateSuccess(200,'User has been already verified.'))
+        }
+        
+        const enteredOTP = req.body.otp;
+        if (therapist.OTP === enteredOTP) {
+            const updateInfo = await Therapist.updateOne({_id:req.query.therapistId},{$set:{isVerified:true, OTP: null}});
+            return next(CreateSuccess(200, 'Your Email has been verified.'));
+        }
+        else{
+            return next(CreateError(403, "OTP doesn't match"))
+        }       
     }
     catch(err)
     {
@@ -120,11 +133,34 @@ module.exports.verifyMail = async (req,res,next)=>{
             errorMessage = "Invalid user ID provided.";
         }
 
-        if (err.code === 11000) {
+        /* if (err.code === 11000) {
             errorMessage = "Email has already been verified.";
-        }
+        } */
 
         return next(CreateError(406, errorMessage));
+    }
+}
+
+module.exports.resendOTP = async (req,res,next)=>{
+    try {
+        const therapist = await Therapist.findById(req.body.therapistId);
+        if(therapist)
+        {
+            if(therapist.isVerified)
+            {
+                return next(CreateError(403, 'User has been already verified'))
+            }
+            const OTP = await sendVerifyMail(therapist.fullName,therapist.email,therapist._id);
+            await Therapist.findByIdAndUpdate({_id:therapist._id},{$set:{OTP: OTP}});
+            return next(CreateSuccess(200, 'OTP has been resent.'));
+        }
+        else
+        {
+            return next(CreateError(406, 'OTP resend Failed!'));
+        }
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(407, 'Something went wrong!'))
     }
 }
 
@@ -144,7 +180,7 @@ module.exports.therapistLogin = async (req,res,next)=>{
         }
         if(!therapist.isVerified)
         {
-            return next(CreateError(401,'User is not verified'));
+            return next(CreateError(401,'User is not verified!'));
         }
         const token = jwt.sign(
             {id: therapist._id, isTherapist: true},
@@ -177,3 +213,27 @@ module.exports.therapistLogout = (req,res,next)=>{
     res.cookie("therapist_access_token","",{maxAge:0});
     return next(CreateSuccess(200,'User logged out'));
 }
+
+module.exports.getTherapistId = async (req, res, next)=>{
+    try {
+        const therapist = await Therapist.findOne({email: req.body.email});
+        
+        if(!therapist)
+        {
+            return next(CreateError(404,'Invalid Credentials'))//User not found
+        }
+        const isPasswordCorrect = await bcrypt.compare(req.body.password, therapist.password);
+        if(!isPasswordCorrect)
+        {
+            return next(CreateError(400,'Invalid Credentials'));//Password is incorrect
+        }
+        if(!therapist.isVerified)
+        {
+            return next(CreateSuccess(201,'User is not verified!',{therapistId: therapist._id}));
+        } 
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, 'Something went wrong!'))
+    }
+}
+

@@ -45,7 +45,7 @@ const therapistSchema = mongoose.Schema({
     }],
     licenseNumber:{
         type: String,
-        unique: true
+        //unique: true
     },
     specilizations: [{
         type: String
@@ -84,8 +84,19 @@ const therapistSchema = mongoose.Schema({
     isVerified: {
         type: Boolean,
         default: false
+    },
+    OTP: {
+        type: String,
+        default: null
+    },
+    isBlocked: {
+        type: Boolean,
+        default: false
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false
     }
-
 },
 {
     timestamps: true

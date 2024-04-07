@@ -49,6 +49,14 @@ const userSchema = mongoose.Schema({
     OTP: {
         type: String,
         default: null
+    },
+    isBlocked: {
+        type: Boolean,
+        default: false
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false
     }
 },
 {
