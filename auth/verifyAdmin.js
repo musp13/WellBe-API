@@ -23,7 +23,7 @@ const verifyAdminToken = (req,res,next)=>{
 
 module.exports.verifyAdmin = (req, res, next)=>{
     verifyAdminToken(req, res, ()=>{
-        console.log('token verified. lets chck req.admin', req.admin,' and req.params= ', req.query);
+        console.log('token verified. lets chck req.admin', req.admin,' and req.params= ', req.query, 'check if condotion true: ', req.admin.id === req.query.id);
         if(req.admin.id === req.query.id )
             next();
         else

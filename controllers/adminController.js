@@ -142,7 +142,7 @@ module.exports.addTherapist = async (req, res, next)=>{
 
 module.exports.getUserList = async (req,res,next)=>{
     try {
-        const users = await User.find().select("_id fullName userName email profileImage isVerified isBlocked");
+        const users = await User.find({isDeleted: {$ne:true}}).select("_id fullName userName email profileImage isVerified isBlocked");
 
         const userData = users.map(user=> ({
             userId: user._id.toString(),
@@ -164,7 +164,7 @@ module.exports.getUserList = async (req,res,next)=>{
 
 module.exports.getTherapistList = async (req,res,next)=>{
     try {
-        const therapists = await Therapist.find().select("_id fullName userName email profileImage isVerified isBlocked isApproved");
+        const therapists = await Therapist.find({isDeleted: {$ne:true}}).select("_id fullName userName email profileImage isVerified isBlocked isApproved");
 
         const therapistData = therapists.map(therapist=> ({
             therapistId: therapist._id.toString(),
@@ -179,6 +179,211 @@ module.exports.getTherapistList = async (req,res,next)=>{
         }));
         return next(CreateSuccess(200, 'Therapists fetched retrieved successfully', {therapistList: therapistData}));
         
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong!"));
+    }
+}
+
+module.exports.therapistApproveToggle = async (req,res,next)=>{
+    try {
+        console.log('inside approve toggle');
+        const therapistId = req.params.therapistId;
+        if (!therapistId) {
+            return next(CreateError(400, "Therapist ID is required"));
+        }
+
+        const therapist = await Therapist.findById(therapistId);
+        if (!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+
+         // Toggle the isApproved status
+         therapist.isApproved = !therapist.isApproved;
+
+         await therapist.save();
+
+         return next(CreateSuccess(200, 'Therapist approval status toggled successfully', {
+            therapistId: therapist._id.toString(),
+            isApproved: therapist.isApproved
+         }));
+
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong!"));
+    }
+}
+
+module.exports.therapistBlockToggle = async (req,res,next)=>{
+    try {
+        const therapistId = req.params.therapistId;
+        if (!therapistId) {
+            return next(CreateError(400, "Therapist ID is required"));
+        }
+
+        const therapist = await Therapist.findById(therapistId);
+        if (!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+
+        if(!therapist.isBlocked)
+        {
+            const token = req.cookies.therapist_access_token;
+            if(token){
+                try {
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    const tokenId = decoded.id;
+                    if(therapistId===tokenId)
+                    {
+                        res.cookie("therapist_access_token","",{maxAge:0});
+                    }
+                } catch (error) {
+                    console.log("User is not signed in:", err.message);
+                }
+            }
+        }
+
+        therapist.isBlocked = !therapist.isBlocked;
+
+        await therapist.save();
+
+        return next(CreateSuccess(200, 'Therapist block status toggled successfully', {
+            therapistId: therapist._id.toString(),
+            isBlocked: therapist.isBlocked
+         }));
+
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong!"));
+    }
+}
+
+module.exports.userBlockToggle = async (req,res,next)=>{
+    try {
+        const userId = req.params.userId;
+        if (!userId) {
+            return next(CreateError(400, "User ID is required"));
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return next(CreateError(404, "User not found"));
+        }
+
+        if(!user.isBlocked)
+        {
+            const token = req.cookies.user_access_token;
+            if(token){
+                try {
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    const tokenId = decoded.id;
+                    if(userId===tokenId)
+                    {
+                        res.cookie("user_access_token","",{maxAge:0});
+                    }
+                } catch (error) {
+                    console.log("User is not signed in:", err.message);
+                }
+            }
+        }
+
+        user.isBlocked = !user.isBlocked;
+
+        await user.save();
+
+        return next(CreateSuccess(200, 'User block status toggled successfully', {
+            userId: user._id.toString(),
+            isBlocked: user.isBlocked
+         }));
+
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong!"));
+    }
+}
+
+module.exports.deleteTherapist = async (req,res,next)=>{
+    try {
+        const therapistId = req.params.therapistId;
+        if (!therapistId) {
+            return next(CreateError(400, "Therapist ID is required"));
+        }
+
+        const therapist = await Therapist.findById(therapistId);
+        if (!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+
+        if(!therapist.isDeleted)
+        {
+            const token = req.cookies.therapist_access_token;
+            if(token){
+                try {
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    const tokenId = decoded.id;
+                    if(therapistId===tokenId)
+                    {
+                        res.cookie("therapist_access_token","",{maxAge:0});
+                    }
+                } catch (error) {
+                    console.log("User is not signed in:", err.message);
+                }
+            }
+        }
+
+        therapist.isDeleted = true;
+
+        await therapist.save();
+
+        return next(CreateSuccess(200, 'Therapist deleted successfully', {
+            therapistId: therapist._id.toString(),
+            isDeleted: therapist.isDeleted
+         }));
+
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong!"));
+    }
+}
+
+module.exports.DeleteUser = async (req,res,next)=>{
+    try {
+        const userId = req.params.userId;
+        if (!userId) {
+            return next(CreateError(400, "User ID is required"));
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return next(CreateError(404, "User not found"));
+        }
+
+        if(!user.isDeleted)
+        {
+            const token = req.cookies.user_access_token;
+            if(token){
+                try {
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    const tokenId = decoded.id;
+                    if(userId===tokenId)
+                    {
+                        res.cookie("user_access_token","",{maxAge:0});
+                    }
+                } catch (error) {
+                    console.log("User is not signed in:", err.message);
+                }
+            }
+        }
+
+        user.isDeleted = true;
+
+        await user.save();
+
+        return next(CreateSuccess(200, 'User block status toggled successfully', {
+            userId: user._id.toString(),
+            isDeleted: user.isDeleted
+         }));
+
     } catch (error) {
         console.log(error.message);
         return next(CreateError(500, "Something went wrong!"));

@@ -5,9 +5,9 @@ const { verifyUser } = require('../auth/verifyUser');
 const userRouter = express.Router();
 
 userRouter.post('/register_user', userRegister);
-userRouter.post('/verify_user', verifyMail);
+userRouter.patch('/verify_user', verifyMail);
 userRouter.post('/user_login', userLogin);
-userRouter.post('/resend_otp', resendOTP);
+userRouter.patch('/resend_otp', resendOTP);
 userRouter.post('/user_logout',verifyUser, userLogout);
 
 module.exports = userRouter;

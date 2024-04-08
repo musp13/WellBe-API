@@ -185,15 +185,24 @@ module.exports.userLogin = async (req,res,next)=>{
         {
             return next(CreateError(404,'User not found'))
         }
+        if(user.isDeleted)
+        {
+            return next(CreateError(406,'User is deleted'));
+        }
         const isPasswordCorrect = await bcrypt.compare(req.body.password, user.password);
         if(!isPasswordCorrect)
         {
             return next(CreateError(400,'Password is incorrect'));
         }
+        
+        if(user.isBlocked)
+        {
+            return next(CreateError(401,'User is blocked'));
+        }
 
         if(!user.isVerified)
         {
-            return next(CreateError(401,'User is not verified'));
+            return next(CreateError(402,'User is not verified'));
         }
 
         const token = jwt.sign(

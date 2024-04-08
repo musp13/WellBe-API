@@ -7,15 +7,16 @@ const { sendVerifyMail } = require('../utils/sendVerifyMail.js');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-//const nodemailer = require('nodemailer');
+const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
+const TherapistToken = require('../models/therapistTokenModel.js');
 
 dotenv.config();
 
-/* const emailUser = process.env.EMAIL_USER;
+const emailUser = process.env.EMAIL_USER;
 const emailPassword = process.env.EMAIL_PASSWORD;
 
-const baseUrl = process.env.BASE_URL; */
+const baseUrl = process.env.BASE_URL;
 
 /* const sendVerifyMail=async (name,email,therapist_id)=>{
     try
@@ -173,11 +174,21 @@ module.exports.therapistLogin = async (req,res,next)=>{
         {
             return next(CreateError(404,'Invalid Credentials'))//User not found
         }
+        if(therapist.isDeleted)
+        {
+            return next(CreateError(406,'User is deleted'));
+        }
         const isPasswordCorrect = await bcrypt.compare(req.body.password, therapist.password);
         if(!isPasswordCorrect)
         {
             return next(CreateError(400,'Invalid Credentials'));//Password is incorrect
         }
+        
+        if(therapist.isBlocked)
+        {
+            return next(CreateError(402,'User is blocked'));
+        }
+
         if(!therapist.isVerified)
         {
             return next(CreateError(401,'User is not verified!'));
@@ -235,5 +246,93 @@ module.exports.getTherapistId = async (req, res, next)=>{
         console.log(error.message);
         return next(CreateError(500, 'Something went wrong!'))
     }
+}
+
+module.exports.sendResetEmail = async (req,res,next)=>{
+    console.log('inside therapist send  reset email', req.body.email)
+    const email = req.body.email;
+    const therapist = await Therapist.findOne({email: email}); // 
+    if(!therapist)
+    {
+        return next(CreateError(404,'User not found'))//User not found
+    }
+    const payload = {
+        email : therapist.email
+    }
+    const expiryTime = 300;
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {expiresIn: expiryTime});
+
+    const newToken = new TherapistToken({
+        userId: therapist._id,
+        token: token
+    });
+    
+    const transporter = nodemailer.createTransport({
+        host:'smtp.gmail.com',
+        port:587,
+        secure:false,
+        requireTLS:true,
+        auth:{
+            user: emailUser,
+            pass: emailPassword
+        }
+    });
+    const mailOptions = {
+        from: {
+            name: 'WellBe',
+            address: emailUser,
+        },
+        to: email,
+        subject:'For Password Reset',
+        html: `<p>Hi ${therapist.fullName}. You can reset your password now. Click <a href="${process.env.BASE_URL_CLIENT}/therapist/reset_password/${token}">here</a><p>`
+        //html:`<p>Hi ${name}. Please click here to <a href="${baseUrl}verify_user?id=${user_id}">verify your email</a>. </p>`
+    }
+    transporter.sendMail(mailOptions,async (error,info)=>{
+        if(error)
+        {
+            console.log(error);
+            return next(CreateError(500, "Something went wrong while sending the email."))
+        }
+        else
+        {
+            await newToken.save();
+            console.log("Email has been sent.",info.response);
+            return next(CreateSuccess(200, "Email has been sent."));
+        }
+    })
+}
+
+module.exports.resetPassword = async (req, res, next)=>{
+    console.log('inside reset password', req.body.resetObj.token);
+    const token = req.body.resetObj.token;
+    const newPassword = req.body.resetObj.password;
+    
+    jwt.verify(token, process.env.JWT_SECRET, async (err, data)=>{
+        if(err){
+            //console.log(err);
+            return next(CreateError(500, "Reset Link is Expired"));
+        }
+        else{
+            const response = data;
+            const therapist = await Therapist.findOne({email: response.email}); // 
+            if(!therapist)
+            {
+                return next(CreateError(404,'User not found'))//User not found
+            } 
+
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+            therapist.password = hashedPassword;
+
+            try {
+                const updatedTherapist = await Therapist.findOneAndUpdate({_id: therapist._id}, {$set: therapist}, {new: true});
+                return next(CreateSuccess(200, "Password reset Success"));
+            } catch (error) {
+                console.log(error.message);
+                return next(CreateError(500, "Something went wrong while resetting the password."))
+            }
+        }
+    })
 }
 
