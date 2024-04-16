@@ -167,9 +167,8 @@ module.exports.resendOTP = async (req,res,next)=>{
 
 module.exports.therapistLogin = async (req,res,next)=>{
     try {
-        //console.log('inside therapist login,check re.body: ', req.body);
+        console.log('inside therapist login,check re.body: ', req.body);
         const therapist = await Therapist.findOne({email: req.body.email});
-        
         if(!therapist)
         {
             return next(CreateError(404,'Invalid Credentials'))//User not found
@@ -178,10 +177,13 @@ module.exports.therapistLogin = async (req,res,next)=>{
         {
             return next(CreateError(406,'User is deleted'));
         }
+        
         const isPasswordCorrect = await bcrypt.compare(req.body.password, therapist.password);
+        
         if(!isPasswordCorrect)
         {
-            return next(CreateError(400,'Invalid Credentials'));//Password is incorrect
+            console.log('working fine', isPasswordCorrect);
+            return next(CreateError(408,'Invalid Credentials'))//Password is incorrect
         }
         
         if(therapist.isBlocked)

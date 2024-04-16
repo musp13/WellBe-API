@@ -31,7 +31,7 @@ module.exports.sendVerifyMail = async (name,email,user_id)=>{
             },
             to: email,
             subject:'For Email Verification',
-            html: `<p>Hi ${name}. Please enter this OTP to verify your Email. Your OTP is ${otp}<p>`
+            html: `<p>Welcome ${name}. Please enter this OTP to verify your Email. Your OTP is ${otp}<p>`
             //html:`<p>Hi ${name}. Please click here to <a href="${baseUrl}verify_user?id=${user_id}">verify your email</a>. </p>`
         }
         transporter.sendMail(mailOptions,(error,info)=>{

@@ -1,9 +1,11 @@
 const User = require('../models/userModel.js');
+const Journal = require('../models/jounalModel.js');
 
 const { CreateError } = require('../utils/error');
 const {CreateSuccess} = require('../utils/success');
 const { generateOTP } = require('../utils/otpGenerator.js');
 const { sendVerifyMail } = require('../utils/sendVerifyMail.js');
+const { encrypt, decrypt } = require('../utils/encryption.js');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -235,4 +237,115 @@ module.exports.userLogin = async (req,res,next)=>{
 module.exports.userLogout = (req,res,next)=>{
     res.cookie("user_access_token","",{maxAge:0});
     return next(CreateSuccess(200,'User logged out'));
+}
+
+
+module.exports.addJournal = async (req,res,next)=>{
+    try {
+        const userId = req.query.id;
+        const user = await User.findById(userId);
+        if(!user)
+        {
+            return next(CreateError(404,"User not found"));
+        }
+        if(!req.body.todaysFocus.trim())
+        {
+            return next(CreateError(401,"Please add today's focus"));
+        }
+
+        const newJournal = new Journal({
+            userId: userId,
+            morningAffirmations: {
+                todaysFocus: encrypt(req.body.todaysFocus),
+                excitedAbout: encrypt(req.body.excitedAbout),
+                affirmation: encrypt(req.body.affirmation),
+                todaysGoal: encrypt(req.body.todaysGoal)
+            },
+            eveningReflections: {
+                goodThings: [encrypt(req.body.goodThings1),encrypt(req.body.goodThings2),encrypt(req.body.goodThings3)],
+                positiveActions: [encrypt(req.body.positiveActions1),encrypt(req.body.positiveActions2),encrypt(req.body.positiveActions3)],
+                gratefulFor: [encrypt(req.body.gratefulFor1),encrypt(req.body.gratefulFor2),encrypt(req.body.gratefulFor3)],
+                peopleMadeFeelGood: [encrypt(req.body.peopleMadeFeelGood1),encrypt(req.body.peopleMadeFeelGood2),encrypt(req.body.peopleMadeFeelGood3)]
+            }
+        });
+
+        await newJournal.save();
+
+        if(newJournal)
+            return next(CreateSuccess(200, "Journal added"));
+        else
+            return next(CreateError(402, "Failed to add journal"));
+        
+       
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong"));
+    }
+}
+
+module.exports.getJournal = async (req,res,next)=>{
+    try {
+        const userId = req.query.id;
+
+        const user = await User.findById(userId);
+
+        if(!user)
+        {
+            return next(CreateError(404, "User not found"));
+        }
+
+        const journals = await Journal.find({userId:user._id});
+
+
+        const decryptedJournals = journals.map(journal => {
+            console.log(journal.morningAffirmations.todaysFocus);
+            return{
+                journalId: journal._id,
+                todaysFocus: decrypt(journal.morningAffirmations.todaysFocus),
+                createdAt: journal.createdAt
+            }
+        })
+        
+        //console.log(decryptedJournals);
+
+        return next(CreateSuccess(200, "Journals Fetched Successfully", {journals: decryptedJournals}));
+        //return next(CreateSuccess(200, "User Found"));
+        
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching the journals"));
+    }
+
+}
+
+module.exports.deleteJournal = async (req, res, next)=>{
+    try {
+        const userId = req.query.id;
+        const user = await User.findById(userId);
+        if(!user)
+        {
+            return next(CreateError(404, "User not found"));
+        }
+
+        const journalId = req.params.journalId;
+        const journal = await Journal.findById(journalId);
+        if(!journal)
+        {
+            return next(CreateError(404, "Journal not found"));
+        }
+
+        if(userId !== journal.userId.toString())
+        {
+            return next(CreateError(405, "You don't have access to this journal."));
+        }
+
+        const deletedJournal = await Journal.findByIdAndDelete(journalId);
+
+        if(deletedJournal)
+            return next(CreateSuccess(200, "Journal has been deleted"))
+        
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while deleting the journal"));
+    }
 }

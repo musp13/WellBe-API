@@ -5,6 +5,11 @@ const { verifyTherapist } = require('../auth/verifyTherapist');
 
 const therapistRouter = express.Router();
 
+const routeCheck = (req,res,next)=>{
+    console.log("this route works");
+    next();
+}
+
 //therapistRouter.post('/register_therapist',verifyAdmin, therapistRegister);
 therapistRouter.patch('/verify_therapist',verifyMail);
 therapistRouter.post('/therapist_login', therapistLogin);
