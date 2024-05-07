@@ -1,21 +1,15 @@
 const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
 
-const { generateOTP } = require('../utils/otpGenerator.js')
-
 dotenv.config();
 
 const emailUser = process.env.EMAIL_USER;
 const emailPassword = process.env.EMAIL_PASSWORD;
 
-module.exports.sendVerifyMail = async (name,email,user_id)=>{
+module.exports.sendEmail = async (email,message, subject)=>{
     try
     {
-        
-        const otp = generateOTP()+'';
-        console.log('lets check otp type',  typeof otp);
-        //console.log("checking credentials", emailUser, emailPassword);
-        let message = `<p>Welcome ${name}. Please enter this OTP to verify your Email. Your OTP is ${otp}<p>`;
+        //let message = `<p>Welcome ${name}. Please enter this OTP to verify your Email. `;
         const transporter = nodemailer.createTransport({
             host:'smtp.gmail.com',
             port:587,
@@ -32,7 +26,7 @@ module.exports.sendVerifyMail = async (name,email,user_id)=>{
                 address: emailUser,
             },
             to: email,
-            subject:'For Email Verification',
+            subject:subject,
             html: message
             //html:`<p>Hi ${name}. Please click here to <a href="${baseUrl}verify_user?id=${user_id}">verify your email</a>. </p>`
         }

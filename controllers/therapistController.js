@@ -1,5 +1,7 @@
 const Therapist = require('../models/therapistModel.js');
-
+const TherapistToken = require('../models/therapistTokenModel.js');
+const TherapistOtp = require('../models/therapistOtpModel.js');
+const Appointment = require('../models/appointmentModel.js');
 
 const { CreateError } = require('../utils/error');
 const {CreateSuccess} = require('../utils/success');
@@ -9,7 +11,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
-const TherapistToken = require('../models/therapistTokenModel.js');
 
 dotenv.config();
 
@@ -109,14 +110,21 @@ module.exports.verifyMail = async (req,res,next)=>{
     {
         const therapist = await Therapist.findById(req.query.therapistId);
         
+        
         if(therapist.isVerified)
         {
             return next(CreateSuccess(200,'User has been already verified.'))
         }
-        
+
+        const OTP = await TherapistOtp.findOne({userId:therapist._id});
+
+        if(!OTP){
+            return next(CreateError(402, "OTP has been expired"));
+        }     
         const enteredOTP = req.body.otp;
-        if (therapist.OTP === enteredOTP) {
-            const updateInfo = await Therapist.updateOne({_id:req.query.therapistId},{$set:{isVerified:true, OTP: null}});
+        console.log(OTP.OTP, enteredOTP);   
+        if (OTP.OTP === enteredOTP) {
+            const updateInfo = await Therapist.updateOne({_id:req.query.therapistId},{$set:{isVerified:true}});
             return next(CreateSuccess(200, 'Your Email has been verified.'));
         }
         else{
@@ -145,6 +153,9 @@ module.exports.verifyMail = async (req,res,next)=>{
 module.exports.resendOTP = async (req,res,next)=>{
     try {
         const therapist = await Therapist.findById(req.body.therapistId);
+        if(!therapist)
+            return next(CreateError(404, "User not found"));
+
         if(therapist)
         {
             if(therapist.isVerified)
@@ -152,8 +163,26 @@ module.exports.resendOTP = async (req,res,next)=>{
                 return next(CreateError(403, 'User has been already verified'))
             }
             const OTP = await sendVerifyMail(therapist.fullName,therapist.email,therapist._id);
-            await Therapist.findByIdAndUpdate({_id:therapist._id},{$set:{OTP: OTP}});
-            return next(CreateSuccess(200, 'OTP has been resent.'));
+            //await Therapist.findByIdAndUpdate({_id:therapist._id},{$set:{OTP: OTP}});
+            
+            otpExists = await TherapistOtp.findOne({userId:therapist._id});
+
+            if(otpExists)
+            {
+                await TherapistOtp.findOneAndDelete({userId:therapist._id}); 
+            }
+            
+            const newTherapistOtp = new TherapistOtp({
+                userId: therapist._id,
+                OTP: OTP
+            });
+
+            await newTherapistOtp.save();
+
+            if(newTherapistOtp)
+                return next(CreateSuccess(200, 'OTP has been resent.'));
+            else
+                return next(CreateSuccess(402, 'Failed to resed OTP.'));
         }
         else
         {
@@ -161,7 +190,7 @@ module.exports.resendOTP = async (req,res,next)=>{
         }
     } catch (error) {
         console.log(error.message);
-        return next(CreateError(407, 'Something went wrong!'))
+        return next(CreateError(500, 'Something went wrong!'))
     }
 }
 
@@ -193,7 +222,7 @@ module.exports.therapistLogin = async (req,res,next)=>{
 
         if(!therapist.isVerified)
         {
-            return next(CreateError(401,'User is not verified!'));
+            return next(CreateError(402,'User is not verified!'));
         }
         const token = jwt.sign(
             {id: therapist._id, isTherapist: true},
@@ -338,3 +367,346 @@ module.exports.resetPassword = async (req, res, next)=>{
     })
 }
 
+module.exports.setOtp = async (req,res,next)=>{
+    try {
+        const therapistId = req.params.therapistId;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist)
+            return next(CreateError(404, "User not found"));
+
+        const OTP = await sendVerifyMail(therapist.fullName,therapist.email, therapist._id);
+
+        otpExists = await TherapistOtp.findOne({userId:therapist._id});
+
+        if(otpExists)
+        {
+            await TherapistOtp.findOneAndDelete({userId:therapist._id}); 
+        }
+            
+        const newTherapistOtp = new TherapistOtp({
+            userId: therapist._id,
+            OTP: OTP
+        });
+
+        const newOTP = await newTherapistOtp.save();
+
+        if(newOTP)
+        {
+            console.log(" new otp: ", newOTP);
+            return next(CreateSuccess(200, "OTP has been set!"));
+        }
+        return next(CreateError(400, "Failed to set OTP!"));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while setting the OTP."));
+    }
+}
+
+module.exports.getTherapistDetails = async (req,res,next)=>{
+    try {
+        const therapistId = req.params.therapistId;
+        const therapist = await Therapist.findById(therapistId, {
+            _id:0, 
+            isDeleted: 0, 
+            password:0,
+            reviews: 0,
+            isVerified: 0,
+            OTP: 0,
+            isBlocked: 0,
+            isDeleted: 0,
+            createdAt: 0,
+            updatedAt: 0  
+        });
+
+        if(!therapist) {
+            return next(CreateError(404, 'User not found'));
+        }
+
+        return next(CreateSuccess(200, 'Therapist details fetched successfully', {therapistDetails: therapist}));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching the user details."))
+    }
+}
+
+module.exports.setAvailability = async ( req,res,next)=>{
+    try {
+        const therapistId = req.query.id;
+        //console.log('id:', therapistId);
+        const therapist = await Therapist.findById(therapistId);
+
+        if(!therapist)
+        {
+            return next(CreateError(404, "User not Found"));
+        }
+
+        availability = req.body;
+        console.log(availability);
+
+        if(availability.length === 0 )
+        {
+            return next(CreateError(403, "No availabilities added. Please chose your available slot"));
+        }
+
+        updatedTherapist = await Therapist.findByIdAndUpdate(therapistId, {$set:{availability:availability}});
+
+        if(updatedTherapist) {
+            return next(CreateSuccess(200, "Updated Available slots successfully"));
+        }
+
+        return next(CreateError(403, "Failed to update available slots"));
+
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while setting availability."))
+    }
+}
+
+module.exports.addLeave = async (req,res, next)=>{
+    try {
+        const therapistId = req.query.id;
+        //console.log('id:', therapistId);
+        const therapist = await Therapist.findById(therapistId);
+
+        if(!therapist)
+        {
+            return next(CreateError(404, "User not Found"));
+        }
+
+        const { leaveDate, startTime, endTime, reason, shift } = req.body;
+
+        if (!leaveDate) {
+            return next(CreateError(400, 'Leave date is required' ));
+        }
+
+        if(!startTime || !endTime) {
+            return next(CreateError(402, 'Start time and end time is required' ));
+        }
+
+        const parsedLeaveDate = new Date(leaveDate);
+
+        if(isNaN(parsedLeaveDate.getTime())) {
+            return next(CreateError(402, 'Invalid leave date format' ));
+        }
+
+        const isLeaveExist = therapist.leave.some(leave=> leave.leaveDate.getTime() === parsedLeaveDate.getTime());
+
+        if(isLeaveExist){
+            return next(CreateError(403, 'Leave for this date already exists'));
+        }
+
+        const leave = {
+            leaveDate : parsedLeaveDate,
+            startTime : startTime || '',
+            endTime : endTime || '',
+            shift: shift
+
+        }
+
+        const updatedTherapist = await Therapist.findByIdAndUpdate(therapistId, {$push: {leave: leave}}, {new: true});
+
+        if(updatedTherapist) {
+            return next(CreateSuccess(200, "Your leave has been added successfully"));
+        }
+
+        return next(CreateError(403, "Failed to mark your leave"));
+        //console.log(req.body);
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while adding your unavailability."))
+    }
+}
+
+module.exports.getMyAvailability = async (req,res,next)=>{
+    try {
+        console.log('thrapistId', req.query.id);
+        const therapistId = req.query.id;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+        return next(CreateSuccess(200, "Fetched therapist availability successfully", therapist.availability));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching the availability."))
+    }
+}
+
+module.exports.getMyLeave = async (req,res,next)=>{
+    try {
+        console.log('thrapistId', req.query.id);
+        const therapistId = req.query.id;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+        return next(CreateSuccess(200, "Fetched therapist leave dates successfully", therapist.leave));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching the leave dates."))
+    }
+}
+
+module.exports.removeLeaveDate = async (req,res,next)=>{
+    try {
+        
+        console.log('thrapistId', req.query.id);
+        const therapistId = req.query.id;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+
+        const leaveDate = new Date(req.body.date);
+        
+        const leaveIndex = therapist.leave.findIndex(leave=> leave.leaveDate.getTime() === leaveDate.getTime());
+
+        //console.log('leaveIndex:', leaveIndex);
+
+        if(leaveIndex !== -1){
+            therapist.leave.splice(leaveIndex, 1);
+            await therapist.save();
+            return next(CreateSuccess(200, 'leaveDate removed successfully'));
+        }
+
+        return next(CreateError(404, 'Leave date not found.'));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while removing the leave date."))
+    }
+}
+
+module.exports.getAppointmentList = async (req,res,next)=>{
+    try {
+        const therapistId = req.query.id;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+        
+        const now = new Date();
+
+        const therapistAppointments = await Appointment.find({
+            therapistId:therapistId, 
+            date: {$gte: now} , 
+            status: {$ne: 'cancelled'}
+        }).sort('date')
+          .populate('clientId', 'fullName')
+          .exec();
+
+          const therapistAppointmentsDetails = therapistAppointments.map(appointment => {
+            return {
+                appointmentId: appointment._id,
+                clientName : appointment.clientId.fullName ,
+                clientContactNumber: appointment.clientContactNumber,
+                slotNumber: appointment.slotNumber ,
+                status: appointment.status,
+                participants: appointment.participants,
+                appointmentNumber: appointment.appointmentNumber,
+                date: appointment.date,
+                message: appointment.message
+            };          
+        });
+        console.log(therapistAppointmentsDetails);
+
+        if(therapistAppointmentsDetails) {
+            return next(CreateSuccess(200, "Fetched therapist appointments successfully", therapistAppointmentsDetails));
+        }
+        
+        return next(CreateError(400, "Failed to fetch appointments."));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching the appointments."));
+    }
+}
+
+module.exports.getCancelledAppointments = async (req,res,next)=>{
+    try {
+        const therapistId = req.query.id;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+        
+        const now = new Date();
+
+        const therapistAppointments = await Appointment.find({
+            therapistId:therapistId, 
+            date: {$gte: now} , 
+            status: 'cancelled'
+        }).sort('date')
+          .populate('clientId', 'fullName')
+          .exec();
+
+          const therapistAppointmentsDetails = therapistAppointments.map(appointment => {
+            return {
+                appointmentId: appointment._id,
+                clientName : appointment.clientId.fullName ,
+                clientContactNumber: appointment.clientContactNumber,
+                slotNumber: appointment.slotNumber ,
+                status: appointment.status,
+                participants: appointment.participants,
+                appointmentNumber: appointment.appointmentNumber,
+                date: appointment.date,
+                message: appointment.message
+            };          
+        });
+        console.log(therapistAppointmentsDetails);
+
+        if(therapistAppointmentsDetails) {
+            return next(CreateSuccess(200, "Fetched therapist appointments successfully", therapistAppointmentsDetails));
+        }
+        
+        return next(CreateError(400, "Failed to fetch appointments."));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching the appointments."));
+    }
+}
+
+module.exports.cancelAppointment = async (req,res,next) => {
+    try {
+        const therapistId = req.query.id;
+        console.log('cancelAppointment', therapistId);
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+        
+        const appointmentId = req.params.appointmentId;
+        
+
+        const appointment = await Appointment.findById(appointmentId);
+        if(!appointment) {
+            return next(CreateError(405, "This appointment is not found"));
+        }
+
+        const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {$set: {status:'cancelled'}});
+
+        if(updatedAppointment)
+        {
+            return next(CreateSuccess(200, "Appointment has been cancelled successfully."));
+        }
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while cancelling the appointment."));
+    }
+}
+
+module.exports.editProfile = async (req,res,next) => {
+    try {
+        const therapistId = req.query.id;
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist) {
+            return next(CreateError(404, "Therapist not found"));
+        }
+        const editFormDetails = req.body;
+        console.log('editFormDetails: ', editFormDetails);
+
+        
+        return next(CreateSuccess(200, "Your profile has been edited successfully."));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while editing the profile."));
+    }
+}

@@ -63,6 +63,7 @@ app.use('/api/therapist', therapistRouter);
 
 //Response Handler middleware
 app.use((responseObj,req,res,next)=>{
+    //console.log('checkResponseObj',responseObj);
     const statusCode = responseObj.status || 500;
     const message = responseObj.message || "Something went wrong!";
     return res.status(statusCode).json({

@@ -50,22 +50,77 @@ const therapistSchema = mongoose.Schema({
     specilizations: [{
         type: String
     }],
-    yearsOfExperience:{
-        type:Number
-    },
+    experiences: [{
+        title: {
+            type: String,
+            required: true
+        },
+        company: {
+            type: String,
+            required: true
+        },
+        location: {
+            type: String
+        },
+        startDate: {
+            type: Date,
+            required: true
+        },
+        endDate: {
+            type: Date
+        },
+        current: {
+            type: Boolean,
+            default: false
+        },
+        description: {
+            type: String
+        }
+    }],
     languagesSpoken: [{
         type: String
     }],
     consultationFee: {
         type: Number// hourly rate
     },
+    ratesPerExtraPerson: {
+        type: Number // percentage extra
+    },
     availability: [{
         day: {
             type: String,
             enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         },
+        slotNumbers: [{
+            type: Number,
+            required: true
+        }],
+        shift : {
+            type: String,
+            enum: ["morning", "afternoon", "fullDay"]
+        },
         startTime: String,
-        endTime: String
+        endTime: String,
+        isUnavailable: {
+            type: Boolean,
+            default: false // Indicates whether the therapist is unavailable for appointments during this slot
+        },
+        reasonForUnavailable: {
+            type: String // Optional field to specify the reason for unavailability (e.g., holiday, personal time off)
+        }
+    }],
+    leave: [{
+        leaveDate: {
+            type: Date,
+            required: true
+        },
+        shift: {
+            type: String,
+            enum: ["morning", "afternoon", "fullDay"]
+        },
+        startTime: String,
+        endTime: String,
+        reason: String
     }],
     reviews: [{
         userId: mongoose.Schema.Types.ObjectId,
