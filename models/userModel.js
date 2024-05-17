@@ -57,6 +57,10 @@ const userSchema = mongoose.Schema({
     isDeleted: {
         type: Boolean,
         default: false
+    },
+    wallet: {
+        type: Number,
+        default: 0
     }
 },
 {

@@ -589,7 +589,7 @@ module.exports.getAppointmentList = async (req,res,next)=>{
         const therapistAppointments = await Appointment.find({
             therapistId:therapistId, 
             date: {$gte: now} , 
-            status: {$ne: 'cancelled'}
+            status: {$nin: ['cancelled', 'pending']}
         }).sort('date')
           .populate('clientId', 'fullName')
           .exec();
@@ -700,11 +700,91 @@ module.exports.editProfile = async (req,res,next) => {
         if(!therapist) {
             return next(CreateError(404, "Therapist not found"));
         }
-        const editFormDetails = req.body;
+        const editFormDetails = req.body;        
         console.log('editFormDetails: ', editFormDetails);
 
+        const { editProfileObj } = req.body;
+        const updateObject = {};
+
+        if (editProfileObj.fullName && editProfileObj.fullName.trim()){
+            updateObject.fullName = editProfileObj.fullName;
+        }
+
+        if (editProfileObj.userName && editProfileObj.userName.trim()){
+            updateObject.userName = editProfileObj.userName;
+        }
+
+        if (editProfileObj.profileImage && editProfileObj.profileImage.trim()){
+            updateObject.profileImage = editProfileObj.profileImage;
+        }
+
+        if (editProfileObj.bio && editProfileObj.bio.trim()){
+             updateObject.bio = editProfileObj.bio;
+        }
+
+        if (editProfileObj.consultationFee){
+            updateObject.consultationFee = parseInt(editProfileObj.consultationFee);
+        } 
+
+        updateObject.qualifications = [];
+        if (editProfileObj.qualification1 && editProfileObj.qualification1.trim()){
+            updateObject.qualifications.push({ degree: editProfileObj.qualification1 });
+        } 
+        if (editProfileObj.qualification2 && editProfileObj.qualification2.trim()){
+            updateObject.qualifications.push({ degree: editProfileObj.qualification2 });
+        } 
+        if (editProfileObj.qualification3 && editProfileObj.qualification3.trim()){
+            updateObject.qualifications.push({ degree: editProfileObj.qualification3 });
+        } 
+
+        updateObject.specializations = [];
+        if (editProfileObj.specialization1 && editProfileObj.specialization1.trim()) {
+            updateObject.specializations.push(editProfileObj.specialization1);
+        }    
+        if (editProfileObj.specialization2 && editProfileObj.specialization2.trim()) 
+            updateObject.specializations.push(editProfileObj.specialization2);
+        if (editProfileObj.specialization3 && editProfileObj.specialization3.trim()) 
+            updateObject.specializations.push(editProfileObj.specialization3);
+
+        updateObject.experiences = [];
+        if (editProfileObj.experienceCompany1 && editProfileObj.experienceCompany1.trim() && editProfileObj.experienceStartDate1 && editProfileObj.experienceEndDate1) {
+            updateObject.experiences.push({
+                company: editProfileObj.experienceCompany1,
+                startDate: new Date(editProfileObj.experienceStartDate1),
+                endDate: new Date(editProfileObj.experienceEndDate1)
+            });
+        }
+
+        if (editProfileObj.experienceCompany2 && editProfileObj.experienceCompany2.trim() && editProfileObj.experienceStartDate2 && editProfileObj.experienceEndDate2) {
+            updateObject.experiences.push({
+                company: editProfileObj.experienceCompany2,
+                startDate: new Date(editProfileObj.experienceStartDate2),
+                endDate: new Date(editProfileObj.experienceEndDate2)
+            });
+        }
+
+        if (editProfileObj.experienceCompany3 && editProfileObj.experienceCompany3.trim() && editProfileObj.experienceStartDate3 && editProfileObj.experienceEndDate3) {
+            updateObject.experiences.push({
+                company: editProfileObj.experienceCompany3,
+                startDate: new Date(editProfileObj.experienceStartDate3),
+                endDate: new Date(editProfileObj.experienceEndDate3)
+            });
+        }
+
+        const updatedTherapist = await Therapist.findOneAndUpdate(
+            { _id: therapistId }, 
+            { $set: updateObject },
+            { new: true } 
+        );
+
+        console.log('lets check updateObj', updateObject);
+        console.log('lets check updatedTherapist', updatedTherapist);
+    
+        if(updatedTherapist)
+            return next(CreateSuccess(200, "Your profile has been edited successfully."));
+
+        return next(CreateError(400, "Failed to update the therapist."));
         
-        return next(CreateSuccess(200, "Your profile has been edited successfully."));
     } catch (error) {
         console.log(error.message);
         return next(CreateError(500, "Something went wrong while editing the profile."));

@@ -47,24 +47,24 @@ const therapistSchema = mongoose.Schema({
         type: String,
         //unique: true
     },
-    specilizations: [{
+    specializations: [{
         type: String
     }],
     experiences: [{
         title: {
             type: String,
-            required: true
+            /* required: true */
         },
         company: {
             type: String,
-            required: true
+            /* required: true */
         },
         location: {
             type: String
         },
         startDate: {
             type: Date,
-            required: true
+            /* required: true */
         },
         endDate: {
             type: Date
@@ -81,7 +81,8 @@ const therapistSchema = mongoose.Schema({
         type: String
     }],
     consultationFee: {
-        type: Number// hourly rate
+        type: Number,// hourly rate
+        default: 1000
     },
     ratesPerExtraPerson: {
         type: Number // percentage extra

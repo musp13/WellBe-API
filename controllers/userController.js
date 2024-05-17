@@ -3,6 +3,7 @@ const Journal = require('../models/jounalModel.js');
 const UserOtp = require('../models/userOtpModel.js');
 const Therapist = require('../models/therapistModel.js');
 const Appointment = require('../models/appointmentModel.js');
+const RazorpayOrder = require('../models/razorpayOrderModel.js');
 
 const { CreateError } = require('../utils/error');
 const {CreateSuccess} = require('../utils/success');
@@ -14,7 +15,14 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
+const Razorpay  = require('razorpay');
+const crypto = require('crypto');
 
+function hmac_sha256(data, key) {
+  const hmac = crypto.createHmac('sha256', key);
+  hmac.update(data);
+  return hmac.digest('hex');
+}
 
 dotenv.config();
 
@@ -22,6 +30,11 @@ const emailUser = process.env.EMAIL_USER;
 const emailPassword = process.env.EMAIL_PASSWORD;
 
 const baseUrl = process.env.BASE_URL;
+
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
 
 /* const sendVerifyMail=async (name,email,user_id)=>{
     try
@@ -569,12 +582,14 @@ module.exports.getTherapistAvailability = async (req,res,next) => {
         }
 
         const currentDate = new Date();
-        const futureLeaves = therapist.leave.filter(leave=> leave.leaveDate >= currentDate)
+        const futureLeaves = therapist.leave.filter(leave=> leave.leaveDate >= currentDate);
+        const consultationFee = therapist.consultationFee;
 
         const availabilityDetails = {
             availability : therapist.availability,
             //leave : therapist.leave
-            leave: futureLeaves 
+            leave: futureLeaves,
+            consultationFee 
         }
         console.log('availabilityDetails: ',availabilityDetails);
         return next(CreateSuccess(200, "Therapist's availability details fetched successfully", availabilityDetails));
@@ -603,19 +618,33 @@ module.exports.bookAppointment = async (req,res, next)=> {
             message,
             participants
         } = req.body;
-
-        //clientId = user._id;
-
+        
+        const therapist = await Therapist.find({_id:therapistId, isVerified: true, isApproved: true, isBlocked: {$ne:true}, isDeleted:{$ne:true}})
+        if(!therapist){
+            return next(CreateError(400, "Therapist is currently unavailable."));
+        }
+        
         const existingAppointment = await Appointment.findOne({
             therapistId,
             date,
             slotNumber,
-            status: {$ne: 'cancelled'}
+            status: {$nin: ['cancelled', 'pending']}
         });
 
         if(existingAppointment){
             return next(CreateError(400, "Therapist is already booked for the selected date and time slot."));
         }
+
+        const existingAppointmentbyUser = await Appointment.findOne({
+            clientId: userId,
+            date,
+            slotNumber,
+            status: {$nin: ['cancelled', 'pending']}
+        });
+        if(existingAppointmentbyUser){
+            return next(CreateError(400, "You have already booked appointment for the selected date and time slot."));
+        }
+
 
         const lastAppointment = await Appointment.findOne().sort({appointmentNumber:-1});
         const appointmentNumber = lastAppointment ? lastAppointment.appointmentNumber +1 : 1 ;
@@ -628,12 +657,35 @@ module.exports.bookAppointment = async (req,res, next)=> {
         slotNumber,
         message,
         participants,
-        appointmentNumber
+        appointmentNumber,
+        status: 'pending',
+        totalAmount : therapist.consultationFee ? therapist.consultationFee : 1000
         });
 
-        await newAppointment.save();
+        
 
-        return next(CreateSuccess(200, "Appointment booked successfully."));
+        /* -------create new order ----------- */
+        const options = {
+            amount: newAppointment.totalAmount*100,//1000, // amount in paise (e.g., 1000 paise = ₹10)
+            currency: 'INR',
+            receipt: newAppointment._id,//'order_receipt',
+            payment_capture: 1,
+        };
+        const order = await razorpay.orders.create(options);
+
+        /* -------create new order ----------- */
+        const newRazorpayOrder = new RazorpayOrder(order);
+
+        newAppointment.razorpayOrder = newRazorpayOrder._id;
+
+        await newAppointment.save();
+        await newRazorpayOrder.save();
+
+        if (order && newAppointment) {
+            return next(CreateSuccess(200, "Appointment booking started.",{ orderId:order.id, orderAmount:order.amount, orderReceipt:order.receipt }));
+        }
+        return next(CreateError(500, "Failed to book appointment."));
+       
     } catch (error) {
         console.log(error.message);
         return next(CreateError(500, "Something went wrong while trying to book appointment."));
@@ -665,13 +717,13 @@ module.exports.getBookedSlots = async (req, res, next)=> {
         const therapistAppointments = await Appointment.find({
             therapistId: therapistId,
             date : {$gte: startOfDay, $lte: endOfDay},
-            status: { $ne: 'cancelled' }
+            status: { $nin: ['cancelled', 'pending'] }
         }).select('slotNumber -_id');
 
         const userAppointments = await Appointment.find({
             clientId: userId,
             date : {$gte: startOfDay, $lte: endOfDay},
-            status: { $ne: 'cancelled' }
+            status: { $nin: ['cancelled', 'pending'] }
         }).select('slotNumber -_id');
         
         const bookedSlots = {
@@ -702,7 +754,7 @@ module.exports.getAppointmentList = async (req,res,next)=>{
         const userAppointments = await Appointment.find({
             clientId:userId, 
             date: {$gte: now} , 
-            status: {$ne: 'cancelled'}
+            status: {$nin: ['cancelled', 'pending']}
         }).sort('date')
           .populate('therapistId', 'fullName')
           .exec();
@@ -771,7 +823,7 @@ module.exports.getCancelledAppointments = async (req,res,next)=>{
 module.exports.cancelAppointment = async (req,res,next) => {
     try {
         const userId = req.query.id;
-        console.log('cancelAppointment', userId);
+        
         const user = await User.findById(userId);
         if(!user) {
             return next(CreateError(404, "User not found"));
@@ -779,20 +831,208 @@ module.exports.cancelAppointment = async (req,res,next) => {
         
         const appointmentId = req.params.appointmentId;
         
-
         const appointment = await Appointment.findById(appointmentId);
         if(!appointment) {
             return next(CreateError(405, "This appointment is not found"));
         }
 
-        const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {$set: {status:'cancelled'}});
+        const paymentId = appointment.razorpayPayment.razorpay_payment_id;
+        const amount = appointment.totalAmount*100;
 
+        console.log('Appointmendt details: ', appointment);
+
+        if(!appointment.razorpayOrder){
+            const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {
+                $set: { status: 'cancelled' }
+            });
+            return next(CreateSuccess(200, 'Appointment CAncelled successfully'));
+        }
+
+        if(!paymentId || !amount){
+            return next(CreateError(405, "Unable to make refunds"));
+        }
+
+        console.log('cancelAppointment', paymentId, {"amount": `${amount}`} );
+
+        const wallet = user.wallet ? user.wallet+appointment.totalAmount : appointment.totalAmount;
+
+        user.wallet = wallet;
+        await user.save();
+
+        const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {
+            $set: { status: 'cancelled' }
+        });
+
+        if(updatedAppointment){
+            return res.status(200).send({ message: "Appointment has been cancelled and refunded successfully." });
+        }
+
+        /* try {
+            const refund = await razorpay.payments.refund({
+                payment_id: paymentId,
+                amount: amount
+            });
+            console.log('refund success', refund);
+
+            const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {
+                $set: { status: 'cancelled' }
+            });
+
+            if (updatedAppointment) {
+                return res.status(200).send({ message: "Appointment has been cancelled and refunded successfully." });
+            } else {
+                throw new Error("Failed to update appointment status.");
+            }
+        } catch (err) {
+            console.error('Refund or appointment update failed:', err);
+            return next(CreateError(500, "Refund failed: " + err.message));
+        } */
+        /* const options = {
+            paymentId: paymentId,
+            amount: amount
+        };
+
+        //console.log('razorpay: ', razorpay);
+        let updatedAppointment, refund=false;
+        razorpay.payments.refund(options, (err, refund) => {
+            if (err) {
+              // Handle the error
+              console.log('refund failed');
+            } else {
+              // The refund was successful
+              console.log('refund success');
+              refund=true;
+            }
+          }); */
+        //console.log('razorpayResponse:', razorpayResponse);
+        
+        /* if (refund) {
+            updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {$set: {status:'cancelled'}});
+        }
+        
         if(updatedAppointment)
         {
             return next(CreateSuccess(200, "Appointment has been cancelled successfully."));
-        }
+        } */
     } catch (error) {
         console.log(error.message);
         return next(CreateError(500, "Something went wrong while cancelling the appointment."));
     }
+}
+
+module.exports.createAppointmentOrder = async (req,res,next)=>{
+    const amount =req.body.amount;
+    const receipt = req.body.receipt;
+
+    if(!amount && amount<1000){
+        return next(CreateError(407, 'Amount is required and shoub be above 1000.'));
+    }
+    if(!receipt){
+        return next(CreateError(407, 'Receipt is not found'));
+    }
+    const options = {
+        amount: amount*100,//1000, // amount in paise (e.g., 1000 paise = ₹10)
+        currency: 'INR',
+        receipt: receipt,//'order_receipt',
+        payment_capture: 1,
+    };
+    try {
+        const order = await razorpay.orders.create(options);
+        return next(CreateSuccess(200, "Created Razorpay Appointment Order Successfully", { orderId: order.id, amount: 1000}));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while creating razorpay order."));
+    }
+}
+const therapistOrSlotValid = async (therapistId,userId,date, slotNumber)=>{
+    try {
+        const therapist = await Therapist.findById(therapistId);
+        if(!therapist || !therapist.isVerified || !therapist.isApproved || therapist.isDeleted || therapist.isBlocked){
+            return false;
+        }
+        const user = await User.findById(userId);
+        if(!user){
+            return false
+        }
+
+        const existingAppointmentForTherapist = await Appointment.findOne({
+            therapistId,
+            date,
+            slotNumber,
+            status: {$nin: ['cancelled', 'pending']}
+        });
+
+        if(existingAppointmentForTherapist){
+            return false;
+        }
+
+        const existingAppointmentbyUser = await Appointment.findOne({
+            clientId: userId,
+            date,
+            slotNumber,
+            status: {$nin: ['cancelled', 'pending']}
+        });
+        if(existingAppointmentbyUser){
+            return false;
+        }
+
+        return true;
+        
+    } catch (error) {
+        console.log(error.message);
+        return false;
+    } 
+}
+
+module.exports.appointmentPaymentSuccess = async (req,res,next)=>{
+    try {
+        const { razorpayPayment, razorpayOrder } = req.body;
+        const appointmentId = razorpayOrder.orderReceipt;
+        const appointment = await Appointment.findById(appointmentId).populate('razorpayOrder', 'id');
+        if(!appointment){
+            console.log('appointment not found ');
+            return next(CreateError(400, "Appointment booking has been terminated."));
+        }
+
+        if (!therapistOrSlotValid()) {
+            return next(CreateError(400, "Appointment booking terminated as therapist or slot is unavailable right now."));
+        }
+
+        
+        let updatedAppointment;
+        if (appointment) {
+            appointment.razorpayPayment = razorpayPayment;
+            updatedAppointment = await appointment.save();
+        }          
+
+        console.log('razorpayPayment in payment success route:', razorpayPayment, updatedAppointment);
+
+        const serverOrderId = appointment.razorpayOrder.id;
+        const paymentId = razorpayPayment.razorpay_payment_id;
+        console.log('serverOrderId:', serverOrderId);
+        console.log('paymentId:', paymentId);
+
+        const generated_signature = hmac_sha256(serverOrderId + "|" + paymentId, process.env.RAZORPAY_KEY_SECRET);
+
+        if(generated_signature === razorpayPayment.razorpay_signature){
+            const updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {$set: {status:'scheduled'}});
+            if (updatedAppointment) {
+                return next(CreateSuccess(200, "Appointment Booked"));
+            }
+        }
+
+        return next(CreateError(400, "Payment Failed."));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while making razorpay payment."));
+    }   
+}
+
+module.exports.appointmentPaymentCancel = async (req,res,next)=>{
+    try {
+        return next(CreateSuccess(200, "Payment Cancelled."));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while cancelling payment."));
+    }   
 }
