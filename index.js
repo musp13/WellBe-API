@@ -2,8 +2,9 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const { Server } = require('socket.io');
+/* const { Server } = require('socket.io'); */
 const http = require('http');
+const initializeSocket = require('./utils/socket')
 
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
@@ -64,21 +65,22 @@ app.use('/api/admin', adminRouter);
 app.use('/api/therapist', therapistRouter);
 
 const server = http.createServer(app);
-const io = new Server(server, {
+const io = initializeSocket(server);
+/* const io = new Server(server, {
     cors: {
         origin: process.env.BASE_URL_CLIENT,
         methods: ["GET", "POST"],
         credentials: true
     }
-});
+}); */
 
-io.on('connection', (socket)=>{
+/* io.on('connection', (socket)=>{
     console.log('socket io connected');
     socket.on('message', (data)=> {
         console.log(data);
         socket.broadcast.emit('received', {data: data, message: 'This is a test message from server'})
     })
-})
+}) */
 
 //Response Handler middleware
 app.use((responseObj,req,res,next)=>{

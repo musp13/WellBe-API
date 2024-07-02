@@ -1,7 +1,7 @@
 const express = require('express');
 const adminRouter = express.Router();
 
-const { adminRegister, adminLogin, adminLogout, addTherapist, getUserList, getTherapistList, therapistApproveToggle, therapistBlockToggle, userBlockToggle, deleteTherapist, DeleteUser, poupulateSlots, populateSlots } = require('../controllers/adminController');
+const { adminRegister, adminLogin, adminLogout, addTherapist, getUserList, getTherapistList, therapistApproveToggle, therapistBlockToggle, userBlockToggle, deleteTherapist, DeleteUser, poupulateSlots, populateSlots, getChatUsers, getOldChats } = require('../controllers/adminController');
 const { verifyAdmin } = require('../auth/verifyAdmin');
 const { routeCheck } = require('../utils/routeCheck');
 
@@ -16,6 +16,8 @@ adminRouter.patch('/therapist_block_toggle/:therapistId', verifyAdmin, therapist
 adminRouter.patch('/user_block_toggle/:userId', verifyAdmin, userBlockToggle);
 adminRouter.patch('/delete_therapist/:therapistId', verifyAdmin, deleteTherapist);
 adminRouter.patch('/delete_user/:userId', verifyAdmin, DeleteUser);
+adminRouter.get('/get_chat_user_list', verifyAdmin, getChatUsers);
+adminRouter.get('/get_old_chats', verifyAdmin, getOldChats);
 adminRouter.post('/admin_logout',verifyAdmin, adminLogout);
 
 module.exports = adminRouter;

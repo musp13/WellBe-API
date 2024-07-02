@@ -61,6 +61,10 @@ const userSchema = mongoose.Schema({
     wallet: {
         type: Number,
         default: 0
+    },
+    isOnline: {
+        type: Boolean,
+        default: false
     }
 },
 {

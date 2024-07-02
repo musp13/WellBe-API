@@ -17,6 +17,7 @@ const nodemailer = require('nodemailer');
 const dotenv = require('dotenv');
 const Razorpay  = require('razorpay');
 const crypto = require('crypto');
+const Chat = require('../models/chatModel.js');
 
 function hmac_sha256(data, key) {
   const hmac = crypto.createHmac('sha256', key);
@@ -769,7 +770,8 @@ module.exports.getAppointmentList = async (req,res,next)=>{
                 participants: appointment.participants,
                 appointmentNumber: appointment.appointmentNumber,
                 date: appointment.date,
-                message: appointment.message
+                message: appointment.message,
+                therapistPeerId: appointment.therapistPeerId
             };          
         });
         console.log(userAppointmentsDetails);
@@ -854,7 +856,19 @@ module.exports.cancelAppointment = async (req,res,next) => {
 
         console.log('cancelAppointment', paymentId, {"amount": `${amount}`} );
 
-        const wallet = user.wallet ? user.wallet+appointment.totalAmount : appointment.totalAmount;
+        const refund = await razorpay.payments.refund(paymentId,{
+            "amount": amount,
+            "speed": "normal",
+            "notes": {
+              "notes_key_1": "Cancelled appointment",
+            },
+            //"receipt": "Receipt No. 31"
+          })
+
+          console.log("let's check the refund status: ",refund);
+          return next(CreateSuccess(200, "Appointment cancelled successfully"));
+
+        /* const wallet = user.wallet ? user.wallet+appointment.totalAmount : appointment.totalAmount;
 
         user.wallet = wallet;
         await user.save();
@@ -865,7 +879,7 @@ module.exports.cancelAppointment = async (req,res,next) => {
 
         if(updatedAppointment){
             return res.status(200).send({ message: "Appointment has been cancelled and refunded successfully." });
-        }
+        } */
 
         /* try {
             const refund = await razorpay.payments.refund({
@@ -886,7 +900,7 @@ module.exports.cancelAppointment = async (req,res,next) => {
         } catch (err) {
             console.error('Refund or appointment update failed:', err);
             return next(CreateError(500, "Refund failed: " + err.message));
-        } */
+        } */ 
         /* const options = {
             paymentId: paymentId,
             amount: amount
@@ -908,9 +922,9 @@ module.exports.cancelAppointment = async (req,res,next) => {
         
         /* if (refund) {
             updatedAppointment = await Appointment.findByIdAndUpdate(appointmentId, {$set: {status:'cancelled'}});
-        }
+        } */
         
-        if(updatedAppointment)
+        /* if(updatedAppointment)
         {
             return next(CreateSuccess(200, "Appointment has been cancelled successfully."));
         } */
@@ -1035,4 +1049,35 @@ module.exports.appointmentPaymentCancel = async (req,res,next)=>{
         console.log(error.message);
         return next(CreateError(500, "Something went wrong while cancelling payment."));
     }   
+}
+
+module.exports.getOldChats = async (req,res,next)=>{
+    try {
+        const userId = req.query.id;
+        const user = await User.findById(userId);
+        if(!user || !user.isVerified || user.isBlocked || user.isDeleted){
+            return next(CreateError(401, "User is unavailable"));
+        }
+        const oldChats = await Chat.find({userId: user._id});
+        return next(CreateSuccess(200, "Old chats fetched successfully", oldChats));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching old chats."));
+    }
+}
+
+module.exports.walletPayment = async (req,res,next)=>{
+    try {
+        const userId = req.query.id;
+        
+        const user = await User.findById(userId);
+        if(!user || !user.isVerified || user.isBlocked || user.isDeleted) {
+            return next(CreateError(404, "User not available"));
+        }
+
+        return next(CreateSuccess(200, "Wallet paymnt success")); ``
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while making wallet payment."));
+    }
 }

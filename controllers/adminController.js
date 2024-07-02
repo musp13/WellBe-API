@@ -12,6 +12,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const generator = require('generate-password');
+const Chat = require('../models/chatModel.js');
 
 dotenv.config();
 
@@ -524,4 +525,29 @@ module.exports.populateSlots = async (req,res,next) =>{
     Slot.insertMany(timeSlots)
         .then(() => console.log('Time slots added successfully!'))
         .catch(err => console.error('Error adding time slots:', err));
+}
+
+module.exports.getChatUsers = async (req,res,next)=>{
+    try {
+        /* const users = await Chat.find({userId}).populate('userId', '_id fullName');
+        const userList = [...new Set(users)];
+        console.log('users:', users);
+        console.log('userList:', userList); */
+        const users = await User.find({isVerified: true, isDeleted: {$ne: true}, isBlocked: {$ne: true}},{fullName:1});
+        return next(CreateSuccess(200, 'Chat Users fetched successfully', users));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching chat list!"));
+    }
+}
+
+module.exports.getOldChats = async (req,res,next)=>{
+    try {
+        
+        const oldChats = await Chat.find();
+        return next(CreateSuccess(200, "Old chats fetched successfully", oldChats));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching old chats."));
+    }
 }

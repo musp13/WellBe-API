@@ -1,5 +1,5 @@
 const express = require('express');
-const {therapistRegister, verifyMail, therapistLogin, therapistLogout, getTherapistId, resendOTP, sendResetEmail, resetPassword, setOtp, getTherapistDetails, setAvailability, addLeave, getMyAvailability, getAppointmentList, cancelAppointment, getMyLeave, removeLeaveDate, editProfile, getCancelledAppointments} = require('../controllers/therapistController');
+const {therapistRegister, verifyMail, therapistLogin, therapistLogout, getTherapistId, resendOTP, sendResetEmail, resetPassword, setOtp, getTherapistDetails, setAvailability, addLeave, getMyAvailability, getAppointmentList, cancelAppointment, getMyLeave, removeLeaveDate, editProfile, getCancelledAppointments, saveRoomId, saveTherapistPeerId, removeTherapistPeerId} = require('../controllers/therapistController');
 const { verifyTherapist } = require('../auth/verifyTherapist');
 const { getAppointmentDetails } = require('../controllers/commonController');
 //const { verifyAdmin } = require('../auth/verifyAdmin');
@@ -30,6 +30,9 @@ therapistRouter.patch('/cancel_appointment/:appointmentId', verifyTherapist, can
 therapistRouter.get('/get_appointment_details/:appointmentId', verifyTherapist, getAppointmentDetails);
 therapistRouter.get('/get_cancelled_appointments', verifyTherapist, getCancelledAppointments);
 therapistRouter.patch('/edit_profile', verifyTherapist, editProfile);
+therapistRouter.patch('/save_room_id', verifyTherapist, saveRoomId);
+therapistRouter.patch('/save_therapist_peer_id', verifyTherapist, saveTherapistPeerId);
+therapistRouter.patch('/remove_therapist_peer_id', verifyTherapist, removeTherapistPeerId);
 therapistRouter.post('/therapist_logout',verifyTherapist, therapistLogout);
 
 module.exports = therapistRouter;

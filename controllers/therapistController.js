@@ -790,3 +790,74 @@ module.exports.editProfile = async (req,res,next) => {
         return next(CreateError(500, "Something went wrong while editing the profile."));
     }
 }
+
+module.exports.saveRoomId = async (req,res,next)=>{
+    try {
+        const therapistId = req.query.id;
+        const { appointmentId, roomId } = req.body; 
+        const appointment = await Appointment.findById(appointmentId);
+        console.log('helloooowww', req.body);
+        if(appointment.therapistId.toString() !== therapistId){
+            return next(CreateError(403, "You don't have access to this appointment"));
+        }
+
+        existingRoomIds = await Appointment.find({},{roomId:1, _id:0});
+        existingRoomIdsArray = existingRoomIds.map(idObject=> idObject.roomId);
+        if(existingRoomIdsArray.includes(roomId)){
+            return next(CreateError(403, "This room ID already exists. choose a different room ID"));
+        }
+
+        appointment.roomId = roomId;
+        await appointment.save();
+        
+        return next(CreateSuccess(200, "RoomId saved successfully"));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while saving the room id."));
+    }
+}
+
+module.exports.saveTherapistPeerId = async (req,res,next)=>{
+    try {
+        console.log('hello inside saveTherapistPeerId');
+        const therapistId = req.query.id;
+        const { appointmentId, peerId } = req.body; 
+        const appointment = await Appointment.findById(appointmentId);
+        console.log('inside saveTherapistPeerId', req.body);
+        if(appointment.therapistId.toString() !== therapistId){
+            return next(CreateError(403, "You don't have access to this appointment"));
+        }
+
+        appointment.therapistPeerId = peerId;
+        await appointment.save();
+        
+        return next(CreateSuccess(200, "PeerId saved successfully"));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while saving the peer id."));
+    }
+
+}
+
+module.exports.removeTherapistPeerId = async (req,res,next)=>{
+    try {
+        console.log('hello inside removeTherapistPeerId');
+        const therapistId = req.query.id;
+        const { appointmentId } = req.body; 
+        const appointment = await Appointment.findById(appointmentId);
+        console.log('inside removeTherapistPeerId', req.body);
+        if(appointment.therapistId.toString() !== therapistId){
+            return next(CreateError(403, "You don't have access to this appointment"));
+        }
+
+        appointment.therapistPeerId = null;
+        await appointment.save();
+        
+        return next(CreateSuccess(200, "PeerId removed successfully"));
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while removing the peer id."));
+    }
+
+}
+

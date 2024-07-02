@@ -36,7 +36,7 @@ const apointmentSchema = mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending','scheduled', 'cancelled', 'completed'],
+        enum: ['pending', 'processing', 'scheduled', 'cancelled', 'completed'],
         default: 'scheduled'
     },
     notes: {
@@ -55,13 +55,14 @@ const apointmentSchema = mongoose.Schema({
     razorpayOrder: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'RazorpayOrder',
-        required: true
     },
     razorpayPayment: {
         razorpay_payment_id: String,
         razorpay_order_id: String ,
         razorpay_signature: String
-      }
+    },
+    roomId: String,
+    therapistPeerId: String
 },
 {
     timestamps: true

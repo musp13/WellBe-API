@@ -1,5 +1,5 @@
 const express = require('express');
-const {userRegister, verifyMail, userLogin, userLogout, resendOTP, addJournal, getJournal, deleteJournal, setOtp, getMyJournal, getJournals, editJournal, getAppontmentFormDetails, getTherapistAvailability, bookAppointment, getBookedSlots, getAppointmentList, cancelAppointment, getCancelledAppointments, createAppointmentOrder, appointmentPaymentSuccess, appointmentPaymentCancel} = require('../controllers/userController');
+const {userRegister, verifyMail, userLogin, userLogout, resendOTP, addJournal, getJournal, deleteJournal, setOtp, getMyJournal, getJournals, editJournal, getAppontmentFormDetails, getTherapistAvailability, bookAppointment, getBookedSlots, getAppointmentList, cancelAppointment, getCancelledAppointments, createAppointmentOrder, appointmentPaymentSuccess, appointmentPaymentCancel, getOldChats} = require('../controllers/userController');
 const { verifyUser } = require('../auth/verifyUser');
 const { getAppointmentDetails } = require('../controllers/commonController');
 
@@ -25,7 +25,8 @@ userRouter.patch('/cancel_appointment/:appointmentId', verifyUser, cancelAppoint
 userRouter.get('/get_appointment_details/:appointmentId', verifyUser, getAppointmentDetails);
 userRouter.post('/create_appointment_order', verifyUser, createAppointmentOrder);
 userRouter.post('/appointment_payment_success', verifyUser, appointmentPaymentSuccess);
-userRouter.get('/appointment_payment_cancel', verifyUser, appointmentPaymentCancel)
+userRouter.get('/appointment_payment_cancel', verifyUser, appointmentPaymentCancel);
+userRouter.get('/get_old_chats', verifyUser, getOldChats);
 userRouter.post('/user_logout',verifyUser, userLogout);
 
 module.exports = userRouter;
