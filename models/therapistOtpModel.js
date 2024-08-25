@@ -13,7 +13,7 @@ const therapistOtpSchema = mongoose.Schema({
     createdAt: {
         type: Date,
         default: Date.now(),
-        expires: 5000
+        expires: 60
     }
     
 });

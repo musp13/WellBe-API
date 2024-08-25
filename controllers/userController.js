@@ -629,8 +629,11 @@ module.exports.bookAppointment = async (req,res, next)=> {
             therapistId,
             date,
             slotNumber,
-            status: {$nin: ['cancelled', 'pending']}
+            status: {$nin: ['cancelled', 'pending', 'processing']}
         });
+        if(existingAppointment && existingAppointment.status==='processing'){
+            return next(CreateError(400, "This slot is temporarily unavailable."));
+        }
 
         if(existingAppointment){
             return next(CreateError(400, "Therapist is already booked for the selected date and time slot."));
@@ -645,7 +648,6 @@ module.exports.bookAppointment = async (req,res, next)=> {
         if(existingAppointmentbyUser){
             return next(CreateError(400, "You have already booked appointment for the selected date and time slot."));
         }
-
 
         const lastAppointment = await Appointment.findOne().sort({appointmentNumber:-1});
         const appointmentNumber = lastAppointment ? lastAppointment.appointmentNumber +1 : 1 ;
@@ -678,6 +680,7 @@ module.exports.bookAppointment = async (req,res, next)=> {
         const newRazorpayOrder = new RazorpayOrder(order);
 
         newAppointment.razorpayOrder = newRazorpayOrder._id;
+        newAppointment.status = 'processing';
 
         await newAppointment.save();
         await newRazorpayOrder.save();
@@ -856,17 +859,28 @@ module.exports.cancelAppointment = async (req,res,next) => {
 
         console.log('cancelAppointment', paymentId, {"amount": `${amount}`} );
 
-        const refund = await razorpay.payments.refund(paymentId,{
+        const refundResponse = await razorpay.payments.refund(paymentId,{
             "amount": amount,
             "speed": "normal",
             "notes": {
               "notes_key_1": "Cancelled appointment",
             },
             //"receipt": "Receipt No. 31"
-          })
+          });
 
           console.log("let's check the refund status: ",refund);
-          return next(CreateSuccess(200, "Appointment cancelled successfully"));
+          if(refundResponse.status==='processed'){
+            appointment.status = 'cancelled';
+            await appointment.save();
+            return next(CreateSuccess(200, "Appointment cancelled successfully"));
+          }else if(refundResponse.status==='cancelled') {
+            return next(CreateError(403, "Refund cancelled. Please try again"));
+          }
+          if(refundResponse.error){
+            return next(CreateError(403, "Failed to make refunds. Please try again"));
+          }
+          
+
 
         /* const wallet = user.wallet ? user.wallet+appointment.totalAmount : appointment.totalAmount;
 
@@ -1079,5 +1093,119 @@ module.exports.walletPayment = async (req,res,next)=>{
     } catch (error) {
         console.log(error.message);
         return next(CreateError(500, "Something went wrong while making wallet payment."));
+    }
+}
+
+module.exports.loadUserProfile = async (req,res,next)=>{
+    try {
+        const userId = req.query.id;
+        const user = await User.findById(userId);
+        if(!user || !user.isVerified || user.isBlocked || user.isDeleted) {
+            return next(CreateError(404, "User not available"));
+        } 
+        userProfileDetails = {
+            fullName: user.fullName,
+            email: user.email, 
+            userName: user.userName, 
+            profileImage: user.profileImage, 
+            phoneNo: user.phoneNo,
+            age: user.age, 
+            gender: user.gender, 
+            location: user.location, 
+            bio: user.bio, 
+            interests: user.interests,
+            workStatus: user.workStatus,
+            education: user.education
+        }
+        console.log('lets check user profile details', userProfileDetails);
+        return next(CreateSuccess(200, "Successfully fetched user profile details.", userProfileDetails))
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while user profile details."));
+    }
+}
+
+module.exports.editUserProfile = async (req,res, next)=>{
+    try {
+        const phoneRegex = /^[6-9]\d{9}$/;
+        const userId = req.query.id;
+        const user = await User.findById(userId);
+        if(!user || !user.isVerified || user.isBlocked || user.isDeleted) {
+            return next(CreateError(404, "User not available"));
+        } 
+        
+        const updateInfo = req.body.editProfileObj;
+        console.log('inisde edit user profile: ', updateInfo);
+        
+        if (updateInfo.profileImage && updateInfo.profileImage.trim()!=='') {
+            user.profileImage = updateInfo.profileImage;
+        }
+        if (updateInfo.fullName && updateInfo.fullName.trim()!=='') {
+            user.fullName = updateInfo.fullName;
+        }
+        if (updateInfo.location && updateInfo.location.trim()!=='') {
+            user.location = updateInfo.location;
+        }
+        if (updateInfo.phoneNo && updateInfo.phoneNo.trim()!=='') {
+            if(!phoneRegex.test(updateInfo.phoneNo)){
+                return next(CreateError(400, "Invalid phone number format. It should be a 10-digit number starting with 6-9."))
+            }
+            user.phoneNo = updateInfo.phoneNo;
+        }
+        if (updateInfo.workStatus && updateInfo.workStatus.trim()!=='') {
+            user.workStatus = updateInfo.workStatus;
+        }
+        if (updateInfo.education && updateInfo.education.trim()!=='') {
+            user.education = updateInfo.education;
+        }
+        if (updateInfo.bio && updateInfo.bio.trim()!=='') {
+            user.bio = updateInfo.bio;
+        }
+        await user.save();
+        const userProfileDetails = {
+            profileImage : user.profileImage,
+            fullName: user.fullName,
+            location: user.location,
+            phoneNo: user.phoneNo,
+            workStatus: user.workStatus,
+            education: user.education,
+            bio: user.bio
+        }
+        return next(CreateSuccess(200, 'User profile updated successfully!', userProfileDetails))
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while editing user profile."));
+    }
+}
+
+module.exports.viewTherapistsList = async (req,res,next)=>{
+    try {
+        const userId = req.query.id;
+        const user = await User.findById(userId);
+        if(!user || !user.isVerified || user.isBlocked || user.isDeleted) {
+            return next(CreateError(401, "User not available"));
+        } 
+
+        const therapistList = await Therapist.find({
+            isVerified: true, 
+            isBlocked: {$ne:true}, 
+            isDeleted: {$ne:true}, 
+            isApproved: true,
+            availability: {$exists: true, $not: {$size: 0}}
+        }, 
+        {
+            fullName:1, 
+            profileImage:1,
+            specializations:1, 
+            _id:0
+        });
+        if (therapistList) {
+            return next(CreateSuccess(200, "Therapist list fetched successfully", therapistList));
+        } else {
+            return next(CreateError(404, "Failed to fetch therapist list"));
+        }
+    } catch (error) {
+        console.log(error.message);
+        return next(CreateError(500, "Something went wrong while fetching therapist list."));
     }
 }

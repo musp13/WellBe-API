@@ -27,7 +27,7 @@ const userSchema = mongoose.Schema({
         type: String
     },
     age:{
-        age: Number
+        type: Number
     },
     gender:{
         type: String,
@@ -39,9 +39,11 @@ const userSchema = mongoose.Schema({
     bio: {
         type: String
     },
+    workStatus: String,
     interests: [{
         type: String
     }],
+    education: String,
     isVerified: {
         type: Boolean,
         default: false

@@ -1,7 +1,8 @@
 const express = require('express');
-const {userRegister, verifyMail, userLogin, userLogout, resendOTP, addJournal, getJournal, deleteJournal, setOtp, getMyJournal, getJournals, editJournal, getAppontmentFormDetails, getTherapistAvailability, bookAppointment, getBookedSlots, getAppointmentList, cancelAppointment, getCancelledAppointments, createAppointmentOrder, appointmentPaymentSuccess, appointmentPaymentCancel, getOldChats} = require('../controllers/userController');
+const {userRegister, verifyMail, userLogin, userLogout, resendOTP, addJournal, getJournal, deleteJournal, setOtp, getMyJournal, getJournals, editJournal, getAppontmentFormDetails, getTherapistAvailability, bookAppointment, getBookedSlots, getAppointmentList, cancelAppointment, getCancelledAppointments, createAppointmentOrder, appointmentPaymentSuccess, appointmentPaymentCancel, getOldChats, loadUserProfile, editUserProfile, viewTherapistsList} = require('../controllers/userController');
 const { verifyUser } = require('../auth/verifyUser');
 const { getAppointmentDetails } = require('../controllers/commonController');
+const { routeCheck } = require('../utils/routeCheck');
 
 const userRouter = express.Router();
 
@@ -27,6 +28,9 @@ userRouter.post('/create_appointment_order', verifyUser, createAppointmentOrder)
 userRouter.post('/appointment_payment_success', verifyUser, appointmentPaymentSuccess);
 userRouter.get('/appointment_payment_cancel', verifyUser, appointmentPaymentCancel);
 userRouter.get('/get_old_chats', verifyUser, getOldChats);
+userRouter.get('/load_user_profile', verifyUser, loadUserProfile);
+userRouter.patch('/edit_user_profile', verifyUser, editUserProfile);
+userRouter.get('/view_therapists_list', verifyUser, viewTherapistsList);
 userRouter.post('/user_logout',verifyUser, userLogout);
 
 module.exports = userRouter;
